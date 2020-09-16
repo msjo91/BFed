@@ -1,4 +1,3 @@
-import argparse
 import copy
 import json
 import os
@@ -8,76 +7,95 @@ from datetime import timedelta
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+import torch.nn as nn
 
-from learn import train, test
-from local import Party
-from models import CifarCNN
-from utils import get_dataset
+from dataset import get_dataset, split_dataset, boost_examples, get_loaders
+from local import average_weights, train, test
+from models import MNISTLeNet5, LeNet5, VGG9, ResNet18
+from options import args
+from utils import store_config, store_results
 
-# Paths
-PATH_PROJ = os.path.dirname(os.path.abspath(os.path.dirname('__file__')))
-PATH_DATA = os.path.join(PATH_PROJ, 'data')
-PATH_RES = os.path.join(PATH_PROJ, 'results')
-PATH_PERF = os.path.join(PATH_RES, 'performances')
-PATH_PLOT = os.path.join(PATH_RES, 'plots')
-PATH_CONF = os.path.join(PATH_PROJ, 'configs')
+# Path
+PATH_SRC = os.getcwd()
+PATH_ROOT = os.path.dirname(PATH_SRC)
+PATH_CONF = os.path.join(PATH_ROOT, 'configs')
 
-# Argument
-parser = argparse.ArgumentParser()
-parser.add_argument('-f', '--file', type=str, help="Option JSON file name")
-args = parser.parse_args()
+# Get configurations
+if args.config:
+    with open(os.path.join(PATH_CONF, f'{args.config}.json'), 'r') as f:
+        cfg = json.load(f)
+else:
+    cfg = vars(args)
 
-# Configurations
-with open(os.path.join(PATH_CONF, args.file + '.json'), 'r') as f:
-    config = json.load(f)
+# Seed
+os.environ['PYTHONHASHSEED'] = str(cfg['seed'])
+random.seed = cfg['seed']
+np.random.seed = cfg['seed']
+torch.manual_seed = cfg['seed']
 
-# Reproducibilty
-os.environ['PYTHONHASHSEED'] = str(config['seed'])
-random.seed(config['seed'])
-np.random.seed(config['seed'])
-torch.manual_seed(config['seed'])
+# File name
+if args.filename:
+    fname = args.filename
+else:
+    fname = 'P{}_{}_BT{}_BS{}_R{}_E{}_{}_{}_S{}'.format(
+        cfg['num'], cfg['model'], int(cfg['boost'] * 10), cfg['batch'], cfg['rounds'], cfg['epochs'],
+        'FSTR' if cfg['ifd'] else 'FRND', 'LSTR' if cfg['stratify'] else 'LRND', cfg['seed']
+    )
+
+print(f'\n>>>> {fname}\n')
 
 # Device
-device = torch.device('cuda:{}'.format(config['gpu']) if torch.cuda.is_available() else 'cpu')
+device = torch.device(f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu')
 
 if __name__ == '__main__':
-    # Begin measuring runtime
-    start_time = time.time()
+    # Get data and split by parties
+    train_dataset, test_dataset = get_dataset(cfg)
+    parties = split_dataset(cfg)
+    parties = boost_examples(parties, cfg)
+    trainloaders, testloader = get_loaders(train_dataset, test_dataset, parties, cfg)
 
-    # Load dataset
-    train_dataset, test_dataset = get_dataset(PATH_DATA, mean=0.5, std=0.5)
-    testloader = DataLoader(test_dataset, batch_size=int(len(test_dataset) / 10), shuffle=False)
+    # Initialize global model
+    if cfg['dataset'] == 'mnist':
+        fed_model = MNISTLeNet5()
+    elif cfg['dataset'] == 'cifar10':
+        if cfg['model'] == 'lenet':
+            fed_model = LeNet5()
+        elif cfg['model'] == 'vgg':
+            fed_model = VGG9()
+        elif cfg['model'] == 'resnet':
+            fed_model = ResNet18()
 
-    # Build parties
-    num_items = int(len(train_dataset) / config['num_parties'])
-    indices = copy.deepcopy(train_dataset.indices)
-    parties = []
+    fed_model.to(device)
+    fed_weights = fed_model.state_dict()
+    criterion = nn.CrossEntropyLoss().to(device)
+    train_losses, test_accs, test_losses = [], [], []
 
-    for i in range(config['num_parties']):
-        allocated_idxs = np.random.choice(indices, num_items, replace=False)
-        p = Party(name=i, config=config, indices=allocated_idxs)
-        parties.append(p)
-        indices = list(set(indices) - set(p.indices))
+    # Begin federated learning
+    st = time.time()
+    for r in range(cfg['rounds']):
+        local_weights, local_losses = [], []
+        print(f'\n | Global Training Round : {r + 1} / {cfg["rounds"]} |')
 
-    # Build model
-    global_model = CifarCNN()
-    global_model.to(device)
-    print(global_model)
+        fed_model.train()
 
-    # Train
-    global_model, losses = train(global_model, config, train_dataset, parties, testloader, test_every=config['test_every'])
+        for i, p in enumerate(parties):
+            w, ls = train(copy.deepcopy(fed_model), trainloaders[i], cfg, criterion, device)
+            local_weights.append(copy.deepcopy(w))
+            train_losses.append(ls)
+            print('  |-- [Party {:>2}] Average Train Loss: {:.4f} ... {} local epochs'.format(i + 1, sum(ls) / len(ls),
+                                                                                              cfg['epochs']))
 
-    # Test
-    test_acc, test_ls = test(global_model, config, testloader)
-    print(f'\n Test Results after {config["rounds"]} global rounds of training:')
-    print("|---- Test Accuracy: {:.2f}%".format(100 * test_acc))
-    print("|---- Test Loss: {:.4f}".format(test_ls))
+        fed_weights = average_weights(local_weights)
+        fed_model.load_state_dict(fed_weights)
 
-    save_dir = os.path.join(PATH_PERF, '{}_test_acc.npy'.format(args.file))
-    np.save(save_dir, test_acc)
-    save_dir = os.path.join(PATH_PERF, '{}_test_ls.npy'.format(args.file))
-    np.save(save_dir, test_ls)
+        test_acc, test_ls = test(fed_model, testloader, criterion, device)
+        test_accs.append(test_acc)
+        test_losses.append(test_ls)
+        print('    |---- Test Accuracy: {:.4f}%'.format(100 * test_acc))
+        print('    |---- Test Loss: {:.4f}'.format(test_ls))
+        print('    |---- Elapsed time: {}'.format(timedelta(seconds=time.time() - st)))
 
-    # Print execution time
-    print('\nRuntime: ', timedelta(seconds=time.time() - start_time))
+    if args.store:
+        PATH_SAVE = os.path.join(PATH_ROOT, 'saves')
+        store_config(cfg, os.path.join(PATH_CONF, f'{fname}.json'))
+        store_results(train_losses, test_losses, test_accs, os.path.join(PATH_SAVE, f'{fname}'))
