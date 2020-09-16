@@ -11,7 +11,7 @@ import torch.nn as nn
 
 from dataset import get_dataset, split_dataset, boost_examples, get_loaders
 from local import average_weights, train, test
-from models import MNISTLeNet5, LeNet5, VGG9, ResNet18
+from models import MNISTLeNet5, LeNet5, VGG9, ResNet18, MobileNetV2, DenseNet
 from options import args
 from utils import store_config, store_results
 
@@ -64,6 +64,10 @@ if __name__ == '__main__':
             fed_model = VGG9()
         elif cfg['model'] == 'resnet':
             fed_model = ResNet18()
+        elif cfg['model'] == 'mobilenet':
+            fed_model = MobileNetV2()
+        elif cfg['model'] == 'densenet':
+            fed_model = DenseNet()
 
     fed_model.to(device)
     fed_weights = fed_model.state_dict()

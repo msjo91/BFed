@@ -8,7 +8,7 @@ parser.add_argument('-s', '--seed', type=int, default=42,
 parser.add_argument('-n', '--num', type=int, default=16,
                     help='Number of virtual parties to use in federated environment')
 parser.add_argument('-m', '--model', type=str, default='vgg',
-                    help='Model [lenet] / [vgg] / [resnet]')
+                    help='Model [lenet] / [vgg] / [resnet] / [mobilenet] / [densenet]')
 
 # Data
 parser.add_argument('-d', '--dataset', type=str, default='cifar10',
