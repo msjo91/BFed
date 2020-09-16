@@ -19,6 +19,8 @@ from utils import store_config, store_results
 PATH_SRC = os.getcwd()
 PATH_ROOT = os.path.dirname(PATH_SRC)
 PATH_CONF = os.path.join(PATH_ROOT, 'configs')
+if not os.path.exists(PATH_CONF):
+    os.mkdir(PATH_CONF)
 
 # Get configurations
 if args.config:
@@ -101,5 +103,7 @@ if __name__ == '__main__':
 
     if args.store:
         PATH_SAVE = os.path.join(PATH_ROOT, 'saves')
+        if not os.path.exists(PATH_SAVE):
+            os.mkdir(PATH_SAVE)
         store_config(cfg, os.path.join(PATH_CONF, f'{fname}.json'))
         store_results(train_losses, test_losses, test_accs, os.path.join(PATH_SAVE, f'{fname}'))

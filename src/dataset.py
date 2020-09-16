@@ -8,7 +8,8 @@ from torchvision import datasets, transforms
 PATH_SRC = os.getcwd()
 PATH_ROOT = os.path.dirname(PATH_SRC)
 PATH_DATA = os.path.join(PATH_ROOT, 'data')
-
+if not os.path.exists(PATH_DATA):
+    os.mkdir(PATH_DATA)
 
 def get_dataset(cfg):
     if cfg['dataset'] == 'cifar10':
