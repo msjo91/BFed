@@ -5,13 +5,15 @@ B-Fed algorithm is designed for federated learning of modern convolutional neura
 + Before: Insert a certain number of forgettable examples in batches
 + Update: Each batch is randomly constructed, but a certain number of forgettable examples is given another chance to be learned
 
-## Denpendencies
-Tested stable dependices:
+## Dependencies
+Tested stable dependencies:
 
 + Python 3.7.9
 + PyTorch 1.6.0
 + Torchvision 0.7.0
 + Scikit-Learn 0.23.2
++ NumPy 1.19.2
++ EfficientNet-PyTorch 0.7.0 (https://github.com/lukemelas/EfficientNet-PyTorch.git)
 + CUDA 10.2
 
 ## Execution
@@ -20,7 +22,7 @@ Tested stable dependices:
 | --- | --- | --- | --- |
 | seed | int | Seed for random number generator | 42 |
 | num | int | Number of virtual parties to use in federated environment | 16 |
-| model | str | CNN model to use [lenet] / [vgg] / [resnet] / [mobilenet] / [densenet] | vgg |
+| model | str | CNN model to use [lenet] / [vgg] / [resnet] / [mobilenet] / [densenet] / [efficientnet] | vgg |
 | dataset | str | Dataset to use [mnist] / [cifar10] | cifar10 |
 | boost | float | Fraction of forgettable examples to boost | 0.3 |
 | ifd | bool | Identical forgettable example distribution among parties | True |

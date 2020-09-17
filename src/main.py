@@ -8,6 +8,7 @@ from datetime import timedelta
 import numpy as np
 import torch
 import torch.nn as nn
+from efficientnet_pytorch import EfficientNet
 
 from dataset import get_dataset, split_dataset, boost_examples, get_loaders
 from local import average_weights, train, test
@@ -70,6 +71,8 @@ if __name__ == '__main__':
             fed_model = MobileNetV2()
         elif cfg['model'] == 'densenet':
             fed_model = DenseNet()
+        elif cfg['model'] == 'efficientnet':
+            fed_model = EfficientNet.from_name('efficientnet-b0')
 
     fed_model.to(device)
     fed_weights = fed_model.state_dict()
